@@ -1,0 +1,11 @@
+[package]
+name = "winit-blit"
+version = "0.0.0"
+authors = ["Osspial <osspial@gmail.com>"]
+edition = "2018"
+description = "Reserved. Blit directly to Winit Windows"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
