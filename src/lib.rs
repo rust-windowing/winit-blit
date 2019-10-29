@@ -65,6 +65,18 @@ impl PixelBuffer {
         self.p.height()
     }
 
+    pub fn row(&self, row: u32) -> Option<&[u8]> {
+        let index = row as usize * self.width_bytes();
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes().get(index..index+pixel_len)
+    }
+
+    pub fn row_mut(&mut self, row: u32) -> Option<&mut [u8]> {
+        let index = row as usize * self.width_bytes();
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes_mut().get_mut(index..index+pixel_len)
+    }
+
     pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [u8]> {
         let stride = self.width_bytes();
         let pixel_len = self.width() as usize * self.bytes_per_pixel();
@@ -130,6 +142,14 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
 
     pub fn height(&self) -> u32 {
         self.p.height()
+    }
+
+    pub fn row(&self, row: u32) -> Option<&[P]> {
+        self.p.row(row).map(P::from_raw_slice)
+    }
+
+    pub fn row_mut(&mut self, row: u32) -> Option<&mut [P]> {
+        self.p.row_mut(row).map(P::from_raw_slice_mut)
     }
 
     pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [P]> {
