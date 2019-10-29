@@ -3,7 +3,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use winit_blit::{PixelBuffer, PixelBufferFormat};
+use winit_blit::{PixelBufferTyped, NativeFormat};
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -26,12 +26,12 @@ fn main() {
                 ..
             } => {
                 let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
-                let mut bitmap = PixelBuffer::new(width, height, PixelBufferFormat::BGR, &window).unwrap();
-                for pixel in bitmap.rows_mut().flat_map(|r| r.chunks_mut(3)) {
-                    pixel.copy_from_slice(&[0, 76, 247]);
+                let mut buffer = PixelBufferTyped::<NativeFormat>::new(width, height, &window).unwrap();
+                for pixel in buffer.rows_mut().flatten() {
+                    *pixel = NativeFormat::from_rgb(247, 76, 0);
                 }
 
-                bitmap.blit(&window).unwrap();
+                buffer.blit(&window).unwrap();
             },
             _ => *control_flow = ControlFlow::Wait,
         }

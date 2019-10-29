@@ -10,7 +10,7 @@ license = "Apache-2.0"
 
 [dependencies]
 raw-window-handle = "0.3"
-winapi = "0.3"
+winapi = {version = "0.3", features = ["windef", "winuser", "wingdi"]}
 
 [dev-dependencies]
 winit = "0.20.0-alpha4"

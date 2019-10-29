@@ -1,4 +1,4 @@
-use crate::{PixelBufferFormat, PixelBufferCreationError};
+use crate::{PixelBufferFormatType, PixelBufferFormatSupported, PixelBufferCreationError};
 use winapi::{
     shared::windef::{HBITMAP},
     um::{wingdi::{self, BITMAP, BITMAPINFOHEADER}, winuser},
@@ -16,11 +16,19 @@ fn px_cast(u: u32) -> i32 {
     u.try_into().expect("Pixel value too large; must be less than 2,147,483,647")
 }
 
+pub fn native_pixel_buffer_format() -> PixelBufferFormatType {
+    PixelBufferFormatType::BGRA
+}
+
+impl PixelBufferFormatSupported for crate::BGRA {}
+impl PixelBufferFormatSupported for crate::BGR {}
+pub type NativeFormat = crate::BGRA;
+
 impl PixelBuffer {
-    pub unsafe fn new(width: u32, height: u32, format: PixelBufferFormat, _: RawWindowHandle) -> Result<PixelBuffer, PixelBufferCreationError> {
+    pub unsafe fn new(width: u32, height: u32, format: PixelBufferFormatType, _: RawWindowHandle) -> Result<PixelBuffer, PixelBufferCreationError> {
         let bit_count = match format {
-            PixelBufferFormat::BGRA => 32,
-            PixelBufferFormat::BGR => 24,
+            PixelBufferFormatType::BGRA => 32,
+            PixelBufferFormatType::BGR => 24,
             _ => return Err(PixelBufferCreationError::FormatNotSupported),
         };
         let handle = {
