@@ -12,6 +12,8 @@ pub struct PixelBuffer {
     len: usize,
 }
 
+unsafe impl Send for PixelBuffer {}
+
 fn px_cast(u: u32) -> i32 {
     u.try_into().expect("Pixel value too large; must be less than 2,147,483,647")
 }
