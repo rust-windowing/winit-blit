@@ -26,9 +26,9 @@ fn main() {
                 ..
             } => {
                 let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
-                let mut bitmap = PixelBuffer::new(width, height, PixelBufferFormat::BGRA, &window).unwrap();
-                for pixel in bitmap[..].chunks_mut(4) {
-                    pixel.copy_from_slice(&[0, 76, 247, 255]);
+                let mut bitmap = PixelBuffer::new(width, height, PixelBufferFormat::BGR, &window).unwrap();
+                for pixel in bitmap.rows_mut().flat_map(|r| r.chunks_mut(3)) {
+                    pixel.copy_from_slice(&[0, 76, 247]);
                 }
 
                 bitmap.blit(&window).unwrap();

@@ -4,7 +4,7 @@ use winapi::{
     um::{wingdi::{self, BITMAP, BITMAPINFOHEADER}, winuser},
 };
 use raw_window_handle::{RawWindowHandle, windows::WindowsHandle};
-use std::{convert::TryInto, ptr, io, ops::{Deref, DerefMut}};
+use std::{convert::TryInto, ptr, io};
 
 pub struct PixelBuffer {
     handle: HBITMAP,
@@ -100,6 +100,10 @@ impl PixelBuffer {
         self.bitmap.bmBitsPixel as usize
     }
 
+    pub fn bytes_per_pixel(&self) -> usize {
+        self.bits_per_pixel() / 8
+    }
+
     pub fn width(&self) -> u32 {
         self.bitmap.bmWidth as u32
     }
@@ -111,19 +115,8 @@ impl PixelBuffer {
     pub fn height(&self) -> u32 {
         self.bitmap.bmHeight as u32
     }
-}
 
-impl Drop for PixelBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            wingdi::DeleteObject(self.handle as _);
-        }
-    }
-}
-
-impl Deref for PixelBuffer {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
+    pub fn bytes(&self) -> &[u8] {
         unsafe {
             std::slice::from_raw_parts(
                 self.bitmap.bmBits as *const u8,
@@ -131,15 +124,21 @@ impl Deref for PixelBuffer {
             )
         }
     }
-}
 
-impl DerefMut for PixelBuffer {
-    fn deref_mut(&mut self) -> &mut [u8] {
+    pub fn bytes_mut(&mut self) -> &mut [u8] {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.bitmap.bmBits as *mut u8,
                 self.len
             )
+        }
+    }
+}
+
+impl Drop for PixelBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            wingdi::DeleteObject(self.handle as _);
         }
     }
 }

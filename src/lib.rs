@@ -1,6 +1,6 @@
 mod platform_impl;
 use raw_window_handle::HasRawWindowHandle;
-use std::{io, ops::{Deref, DerefMut}};
+use std::io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PixelBufferFormat {
@@ -41,6 +41,10 @@ impl PixelBuffer {
         self.p.bits_per_pixel()
     }
 
+    pub fn bytes_per_pixel(&self) -> usize {
+        self.p.bytes_per_pixel()
+    }
+
     pub fn width(&self) -> u32 {
         self.p.width()
     }
@@ -52,17 +56,28 @@ impl PixelBuffer {
     pub fn height(&self) -> u32 {
         self.p.height()
     }
-}
 
-impl Deref for PixelBuffer {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        self.p.deref()
+    pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [u8]> {
+        let stride = self.width_bytes();
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes()
+            .chunks(stride)
+            .map(move |row| &row[..pixel_len])
     }
-}
 
-impl DerefMut for PixelBuffer {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        self.p.deref_mut()
+    pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [u8]> {
+        let stride = self.width_bytes();
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes_mut()
+            .chunks_mut(stride)
+            .map(move |row| &mut row[..pixel_len])
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        self.p.bytes()
+    }
+
+    pub fn bytes_mut(&mut self) -> &mut [u8] {
+        self.p.bytes_mut()
     }
 }
