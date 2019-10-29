@@ -26,7 +26,7 @@ fn main() {
                 ..
             } => {
                 let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
-                let mut buffer = PixelBufferTyped::<NativeFormat>::new(width, height, &window).unwrap();
+                let mut buffer = PixelBufferTyped::<NativeFormat>::new_supported(width, height, &window);
                 for pixel in buffer.rows_mut().flatten() {
                     *pixel = NativeFormat::from_rgb(247, 76, 0);
                 }
