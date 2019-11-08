@@ -27,8 +27,16 @@ fn main() {
             } => {
                 let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
                 let mut buffer = PixelBufferTyped::<NativeFormat>::new_supported(width, height, &window);
-                for pixel in buffer.rows_mut().flatten() {
-                    *pixel = NativeFormat::from_rgb(247, 76, 0);
+                for (i, row) in buffer.rows_mut().enumerate() {
+                    let value = 255;//(i % 256) as u16;
+                    for (j, pixel) in row.into_iter().enumerate() {
+                        let value = value * (j % 256) as u16 / 256;
+                        *pixel = NativeFormat::from_rgb(
+                            (256 * value / 256) as u8,
+                            (256 * value / 256) as u8,
+                            (256 * value / 256) as u8,
+                        );
+                    }
                 }
 
                 buffer.blit(&window).unwrap();

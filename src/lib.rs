@@ -11,98 +11,110 @@ pub enum PixelBufferCreationError {
     FormatNotSupported,
 }
 
+/// A buffer of pixels that can be blitted onto a window.
+///
+/// The pixel buffer's origin is in the top-left corner of the image.
 pub struct PixelBuffer {
     p: platform_impl::PixelBuffer,
 }
 
+/// A buffer of pixels with a statically-checked pixel format.
+///
+/// The pixel buffer's origin is in the top-left corner of the image.
 pub struct PixelBufferTyped<P: PixelBufferFormat> {
     p: PixelBuffer,
     _format: PhantomData<P>
 }
 
 impl PixelBufferFormatType {
-    pub fn native() -> PixelBufferFormatType {
-        platform_impl::native_pixel_buffer_format()
-    }
+    /// The native pixel buffer format for the current plaform.
+    pub const NATIVE: PixelBufferFormatType = NativeFormat::FORMAT_TYPE;
 }
 
 impl PixelBuffer {
+    /// Initialize a new pixel buffer.
+    ///
+    /// Can return `Err` if the platform doesn't support the requested pixel buffer type.
     pub fn new<H: HasRawWindowHandle>(width: u32, height: u32, format: PixelBufferFormatType, window: &H) -> Result<PixelBuffer, PixelBufferCreationError> {
         unsafe {
             platform_impl::PixelBuffer::new(width, height, format, window.raw_window_handle()).map(|p| PixelBuffer { p })
         }
     }
 
+    /// Blits the pixel buffer's contents onto `window`.
+    ///
+    /// # Panics
+    /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
+    /// do so will result in a panic.
     pub fn blit<H: HasRawWindowHandle>(&self, window: &H) -> io::Result<()> {
         unsafe {
             self.p.blit(window.raw_window_handle())
         }
     }
 
+    /// Blits a subsection of the pixel buffer's contents onto `window`.
+    ///
+    /// # Panics
+    /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
+    /// do so will result in a panic.
     pub fn blit_rect<H: HasRawWindowHandle>(&self, src_pos: (u32, u32), dst_pos: (u32, u32), blit_size: (u32, u32), window: &H) -> io::Result<()> {
         unsafe {
             self.p.blit_rect(src_pos, dst_pos, blit_size, window.raw_window_handle())
         }
     }
 
+    /// The total number of bits in an individual pixel.
+    ///
+    /// Will always be a multiple of `8`.
     pub fn bits_per_pixel(&self) -> usize {
         self.p.bits_per_pixel()
     }
 
+    /// The total number of bytes in an individual pixel.
     pub fn bytes_per_pixel(&self) -> usize {
         self.p.bytes_per_pixel()
     }
 
+    /// The width, in pixels, of the pixel buffer.
     pub fn width(&self) -> u32 {
         self.p.width()
     }
 
-    pub fn width_bytes(&self) -> usize {
-        self.p.width_bytes()
+    /// The length, in bytes, of a single row of the pixel buffer.
+    pub fn row_len(&self) -> usize {
+        self.p.row_len()
     }
 
+    /// The height, in pixels, of the pixel buffer.
     pub fn height(&self) -> u32 {
         self.p.height()
     }
 
+    /// Gets the row at the particular height.
     pub fn row(&self, row: u32) -> Option<&[u8]> {
-        let index = row as usize * self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.bytes().get(index..index+pixel_len)
+        self.p.row(row)
     }
 
+    /// Mutably gets the row at the particular height.
     pub fn row_mut(&mut self, row: u32) -> Option<&mut [u8]> {
-        let index = row as usize * self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.bytes_mut().get_mut(index..index+pixel_len)
+        self.p.row_mut(row)
     }
 
+    /// Iterate through all rows in the pixel buffer.
     pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [u8]> {
-        let stride = self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.bytes()
-            .chunks(stride)
-            .map(move |row| &row[..pixel_len])
+        self.p.rows()
     }
 
+    /// Mutably iterate through all rows in the pixel buffer.
     pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [u8]> {
-        let stride = self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.bytes_mut()
-            .chunks_mut(stride)
-            .map(move |row| &mut row[..pixel_len])
-    }
-
-    pub fn bytes(&self) -> &[u8] {
-        self.p.bytes()
-    }
-
-    pub fn bytes_mut(&mut self) -> &mut [u8] {
-        self.p.bytes_mut()
+        self.p.rows_mut()
     }
 }
 
 impl<P: PixelBufferFormat> PixelBufferTyped<P> {
+    /// Initialize a new pixel buffer.
+    ///
+    /// Can return `Err` if the platform doesn't support the requested pixel buffer type.
     pub fn new<H: HasRawWindowHandle>(width: u32, height: u32, window: &H) -> Result<PixelBufferTyped<P>, PixelBufferCreationError> {
         Ok(PixelBufferTyped {
             p: PixelBuffer::new(width, height, P::FORMAT_TYPE, window)?,
@@ -110,62 +122,79 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
         })
     }
 
+    /// Initialize a new pixel buffer.
+    ///
+    /// This always works, since we've statically checked that the pixel format is supported by
+    /// the platform.
     pub fn new_supported<H: HasRawWindowHandle>(width: u32, height: u32, window: &H) -> PixelBufferTyped<P>
         where P: PixelBufferFormatSupported
     {
         Self::new(width, height, window).unwrap()
     }
 
+    /// Blits the pixel buffer's contents onto `window`.
+    ///
+    /// # Panics
+    /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
+    /// do so will result in a panic.
     pub fn blit<H: HasRawWindowHandle>(&self, window: &H) -> io::Result<()> {
         self.p.blit(window)
     }
 
+    /// Blits a subsection of the pixel buffer's contents onto `window`.
+    ///
+    /// # Panics
+    /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
+    /// do so will result in a panic.
     pub fn blit_rect<H: HasRawWindowHandle>(&self, src_pos: (u32, u32), dst_pos: (u32, u32), blit_size: (u32, u32), window: &H) -> io::Result<()> {
         self.p.blit_rect(src_pos, dst_pos, blit_size, window)
     }
 
+    /// The total number of bits in an individual pixel.
+    ///
+    /// Will always be a multiple of `8`.
     pub fn bits_per_pixel(&self) -> usize {
         self.p.bits_per_pixel()
     }
 
+    /// The total number of bytes in an individual pixel.
     pub fn bytes_per_pixel(&self) -> usize {
         self.p.bytes_per_pixel()
     }
 
+    /// The width, in pixels, of the pixel buffer.
     pub fn width(&self) -> u32 {
         self.p.width()
     }
 
-    pub fn width_bytes(&self) -> usize {
-        self.p.width_bytes()
+    /// The length, in bytes, of a single row of the pixel buffer.
+    pub fn row_len(&self) -> usize {
+        self.p.row_len()
     }
 
+    /// The height, in pixels, of the pixel buffer.
     pub fn height(&self) -> u32 {
         self.p.height()
     }
 
+    /// Gets the row at the particular height.
     pub fn row(&self, row: u32) -> Option<&[P]> {
         self.p.row(row).map(P::from_raw_slice)
     }
 
+    /// Mutably gets the row at the particular height.
     pub fn row_mut(&mut self, row: u32) -> Option<&mut [P]> {
         self.p.row_mut(row).map(P::from_raw_slice_mut)
     }
 
+    /// Iterate through all rows in the pixel buffer.
     pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [P]> {
-        let stride = self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.p.bytes()
-            .chunks(stride)
-            .map(move |row| P::from_raw_slice(&row[..pixel_len]))
+        self.p.rows().map(P::from_raw_slice)
     }
 
+    /// Mutably iterate through all rows in the pixel buffer.
     pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [P]> {
-        let stride = self.width_bytes();
-        let pixel_len = self.width() as usize * self.bytes_per_pixel();
-        self.p.bytes_mut()
-            .chunks_mut(stride)
-            .map(move |row| P::from_raw_slice_mut(&mut row[..pixel_len]))
+        self.p.rows_mut().map(P::from_raw_slice_mut)
     }
 }
 
