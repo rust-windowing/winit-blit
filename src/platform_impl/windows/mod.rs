@@ -79,9 +79,9 @@ impl PixelBuffer {
             handle = ptr::null_mut();
             bitmap = BITMAP {
                 bmType: 0,
-                bmWidth: 0,
-                bmHeight: 0,
-                bmWidthBytes: 0,
+                bmWidth: px_cast(width),
+                bmHeight: px_cast(height),
+                bmWidthBytes: px_cast(width * bit_count as u32 / 8),
                 bmPlanes: 1,
                 bmBitsPixel: bit_count,
                 bmBits: ptr::null_mut(),
