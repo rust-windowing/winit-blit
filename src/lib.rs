@@ -6,6 +6,9 @@ use std::{
     marker::PhantomData,
 };
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 #[derive(Debug, Clone)]
 pub enum PixelBufferCreationError {
     FormatNotSupported,
@@ -101,13 +104,25 @@ impl PixelBuffer {
     }
 
     /// Iterate through all rows in the pixel buffer.
-    pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [u8]> {
+    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a [u8]> {
         self.p.rows()
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
-    pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [u8]> {
+    pub fn rows_mut<'a>(&'a mut self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a mut [u8]> {
         self.p.rows_mut()
+    }
+
+    /// Iterate through all rows in the pixel buffer.
+    #[cfg(feature = "rayon")]
+    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item=&'a [u8]> {
+        self.p.par_rows()
+    }
+
+    /// Mutably iterate through all rows in the pixel buffer.
+    #[cfg(feature = "rayon")]
+    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item=&'a mut [u8]> {
+        self.p.par_rows_mut()
     }
 }
 
@@ -188,13 +203,29 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     }
 
     /// Iterate through all rows in the pixel buffer.
-    pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [P]> {
+    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a [P]> {
         self.p.rows().map(P::from_raw_slice)
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
-    pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [P]> {
+    pub fn rows_mut<'a>(&'a mut self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a mut [P]> {
         self.p.rows_mut().map(P::from_raw_slice_mut)
+    }
+
+    /// Iterate through all rows in the pixel buffer.
+    #[cfg(feature = "rayon")]
+    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item=&'a [P]>
+        where P: Send + Sync,
+    {
+        self.p.par_rows().map(P::from_raw_slice)
+    }
+
+    /// Mutably iterate through all rows in the pixel buffer.
+    #[cfg(feature = "rayon")]
+    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item=&'a mut [P]>
+        where P: Send + Sync,
+    {
+        self.p.par_rows_mut().map(P::from_raw_slice_mut)
     }
 }
 

@@ -6,6 +6,9 @@ use winapi::{
 use raw_window_handle::{RawWindowHandle, windows::WindowsHandle};
 use std::{convert::TryInto, ptr, io};
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 pub struct PixelBuffer {
     handle: HBITMAP,
     bitmap: BITMAP,
@@ -110,10 +113,10 @@ impl PixelBuffer {
         wingdi::SelectObject(src_dc, self.handle as _);
         let result = wingdi::BitBlt(
             hdc,
-            px_cast(src_pos.0), px_cast(self.height().wrapping_sub(blit_size.1).wrapping_add(src_pos.1)),
+            px_cast(src_pos.0), px_cast(src_pos.1),
             px_cast(blit_size.0), px_cast(blit_size.1),
             src_dc,
-            px_cast(dst_pos.0), px_cast(self.height().wrapping_sub(blit_size.1).wrapping_add(dst_pos.1)),
+            px_cast(dst_pos.0), px_cast(dst_pos.1),
             wingdi::SRCCOPY,
         );
         let error = io::Error::last_os_error();
@@ -183,7 +186,7 @@ impl PixelBuffer {
         self.bytes_mut().get_mut(index..index+pixel_len)
     }
 
-    pub fn rows<'a>(&'a self) -> impl Iterator<Item=&'a [u8]> {
+    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a [u8]> {
         let stride = match self.row_len() {
             0 => 1,
             l => l,
@@ -195,7 +198,7 @@ impl PixelBuffer {
             .map(move |row| &row[..pixel_len])
     }
 
-    pub fn rows_mut<'a>(&'a mut self) -> impl Iterator<Item=&'a mut [u8]> {
+    pub fn rows_mut<'a>(&'a mut self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a mut [u8]> {
         let stride = match self.row_len() {
             0 => 1,
             l => l,
@@ -203,6 +206,32 @@ impl PixelBuffer {
         let pixel_len = self.width() as usize * self.bytes_per_pixel();
         self.bytes_mut()
             .chunks_mut(stride)
+            .rev()
+            .map(move |row| &mut row[..pixel_len])
+    }
+
+    #[cfg(feature = "rayon")]
+    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item=&'a [u8]> {
+        let stride = match self.row_len() {
+            0 => 1,
+            l => l,
+        };
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes()
+            .par_chunks(stride)
+            .rev()
+            .map(move |row| &row[..pixel_len])
+    }
+
+    #[cfg(feature = "rayon")]
+    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item=&'a mut [u8]> {
+        let stride = match self.row_len() {
+            0 => 1,
+            l => l,
+        };
+        let pixel_len = self.width() as usize * self.bytes_per_pixel();
+        self.bytes_mut()
+            .par_chunks_mut(stride)
             .rev()
             .map(move |row| &mut row[..pixel_len])
     }
