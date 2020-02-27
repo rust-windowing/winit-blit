@@ -1,5 +1,5 @@
 use winit::{
-    event::{Event, WindowEvent, KeyboardInput, ElementState},
+    event::{ElementState, Event, KeyboardInput, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -26,7 +26,15 @@ fn main() {
 
         match event {
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput{input: KeyboardInput{state: ElementState::Pressed, ..}, ..},
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    },
                 window_id,
             } if window_id == window.id() => {
                 blend_mode = match blend_mode {
@@ -40,28 +48,29 @@ fn main() {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => *control_flow = ControlFlow::Exit,
-            Event::WindowEvent {
-                event: WindowEvent::RedrawRequested,
-                ..
-            } => {
-                let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
-                let mut buffer = PixelBufferTyped::<BGRA>::new_supported(width, height, &window);
-                let start = std::time::Instant::now();
-                for (i, row) in buffer.rows_mut().enumerate() {
-                    let y = ((i as f32 / height as f32) * 255.0).round() as u8;
-                    let t_blend = blend_approx(y, red, green);
-                    let b_blend = blend_approx(y, alpha, blue);
-                    for (j, pixel) in row.into_iter().enumerate() {
-                        // *pixel = x_blend;
-                        let x = ((j as f32 / width as f32) * 255.0).round() as u8;
-                        *pixel = blend_approx(x, t_blend, b_blend);
-                    }
-                }
-                let end = std::time::Instant::now();
-                println!("{:?}", end - start);
+            Event::RedrawRequested(window_id) => {
+                if window_id == window.id() {
+                    let (width, height): (u32, u32) = window.inner_size().into();
+                    let mut buffer =
+                        PixelBufferTyped::<BGRA>::new_supported(width, height, &window);
+                    let start = std::time::Instant::now();
 
-                buffer.blit(&window).unwrap();
-            },
+                    for (i, row) in buffer.rows_mut().enumerate() {
+                        let y = ((i as f32 / height as f32) * 255.0).round() as u8;
+                        let t_blend = blend_approx(y, red, green);
+                        let b_blend = blend_approx(y, alpha, blue);
+                        for (j, pixel) in row.into_iter().enumerate() {
+                            // *pixel = x_blend;
+                            let x = ((j as f32 / width as f32) * 255.0).round() as u8;
+                            *pixel = blend_approx(x, t_blend, b_blend);
+                        }
+                    }
+                    let end = std::time::Instant::now();
+                    println!("{:?}", end - start);
+
+                    buffer.blit(&window).unwrap();
+                }
+            }
             _ => *control_flow = ControlFlow::Wait,
         }
     });
@@ -78,7 +87,10 @@ fn blend(i: u8, a: BGRA, b: BGRA) -> BGRA {
     let i = i as f32 / 255.0;
     let a_f = 1.0 - i;
     let b_f = i;
-    let bl = |a: u8, b: u8| ((a_f * (a as f32 / 255.0).powf(2.2) + b_f * (b as f32 / 255.0).powf(2.2)).powf(1.0/2.2) * 255.0) as u8;
+    let bl = |a: u8, b: u8| {
+        ((a_f * (a as f32 / 255.0).powf(2.2) + b_f * (b as f32 / 255.0).powf(2.2)).powf(1.0 / 2.2)
+            * 255.0) as u8
+    };
 
     BGRA {
         r: bl(a.r, b.r),
@@ -89,17 +101,12 @@ fn blend(i: u8, a: BGRA, b: BGRA) -> BGRA {
 }
 
 fn bl(f: u8, a: u8, b: u8) -> u8 {
-    let a_linear = POWER_TABLE[a as usize] as u32;//a.pow(3) + 765 * a.pow(2);
-    let b_linear = POWER_TABLE[b as usize] as u32;//b.pow(3) + 765 * b.pow(2);
+    let a_linear = POWER_TABLE[a as usize] as u32; //a.pow(3) + 765 * a.pow(2);
+    let b_linear = POWER_TABLE[b as usize] as u32; //b.pow(3) + 765 * b.pow(2);
     let f = f as u32;
     let a_f = 255 - f;
     let b_f = f;
-    let val = (
-        (
-            a_f * a_linear +
-            b_f * b_linear
-        ) / 255
-    ) as u16;
+    let val = ((a_f * a_linear + b_f * b_linear) / 255) as u16;
     // CORRECTION_TABLE[val as usize]
     interp_correction_table((val >> 8) as u8, val as u8)
 }
@@ -169,7 +176,6 @@ fn bl_naive(f: u8, a: u8, b: u8) -> u8 {
     let b_f = f;
     ((a_f * a + b_f * b) / 255) as u8
 }
-
 
 fn blend_naive(f: u8, a: BGRA, b: BGRA) -> BGRA {
     BGRA {

@@ -1,10 +1,6 @@
 mod platform_impl;
 use raw_window_handle::HasRawWindowHandle;
-use std::{
-    io,
-    fmt::Debug,
-    marker::PhantomData,
-};
+use std::{fmt::Debug, io, marker::PhantomData};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -26,7 +22,7 @@ pub struct PixelBuffer {
 /// The pixel buffer's origin is in the top-left corner of the image.
 pub struct PixelBufferTyped<P: PixelBufferFormat> {
     p: PixelBuffer,
-    _format: PhantomData<P>
+    _format: PhantomData<P>,
 }
 
 impl PixelBufferFormatType {
@@ -38,9 +34,15 @@ impl PixelBuffer {
     /// Initialize a new pixel buffer.
     ///
     /// Can return `Err` if the platform doesn't support the requested pixel buffer type.
-    pub fn new<H: HasRawWindowHandle>(width: u32, height: u32, format: PixelBufferFormatType, window: &H) -> Result<PixelBuffer, PixelBufferCreationError> {
+    pub fn new<H: HasRawWindowHandle>(
+        width: u32,
+        height: u32,
+        format: PixelBufferFormatType,
+        window: &H,
+    ) -> Result<PixelBuffer, PixelBufferCreationError> {
         unsafe {
-            platform_impl::PixelBuffer::new(width, height, format, window.raw_window_handle()).map(|p| PixelBuffer { p })
+            platform_impl::PixelBuffer::new(width, height, format, window.raw_window_handle())
+                .map(|p| PixelBuffer { p })
         }
     }
 
@@ -50,9 +52,7 @@ impl PixelBuffer {
     /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
     /// do so will result in a panic.
     pub fn blit<H: HasRawWindowHandle>(&self, window: &H) -> io::Result<()> {
-        unsafe {
-            self.p.blit(window.raw_window_handle())
-        }
+        unsafe { self.p.blit(window.raw_window_handle()) }
     }
 
     /// Blits a subsection of the pixel buffer's contents onto `window`.
@@ -60,9 +60,16 @@ impl PixelBuffer {
     /// # Panics
     /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
     /// do so will result in a panic.
-    pub fn blit_rect<H: HasRawWindowHandle>(&self, src_pos: (u32, u32), dst_pos: (u32, u32), blit_size: (u32, u32), window: &H) -> io::Result<()> {
+    pub fn blit_rect<H: HasRawWindowHandle>(
+        &self,
+        src_pos: (u32, u32),
+        dst_pos: (u32, u32),
+        blit_size: (u32, u32),
+        window: &H,
+    ) -> io::Result<()> {
         unsafe {
-            self.p.blit_rect(src_pos, dst_pos, blit_size, window.raw_window_handle())
+            self.p
+                .blit_rect(src_pos, dst_pos, blit_size, window.raw_window_handle())
         }
     }
 
@@ -104,24 +111,26 @@ impl PixelBuffer {
     }
 
     /// Iterate through all rows in the pixel buffer.
-    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a [u8]> {
+    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item = &'a [u8]> {
         self.p.rows()
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
-    pub fn rows_mut<'a>(&'a mut self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a mut [u8]> {
+    pub fn rows_mut<'a>(
+        &'a mut self,
+    ) -> impl ExactSizeIterator + DoubleEndedIterator<Item = &'a mut [u8]> {
         self.p.rows_mut()
     }
 
     /// Iterate through all rows in the pixel buffer.
     #[cfg(feature = "rayon")]
-    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item=&'a [u8]> {
+    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item = &'a [u8]> {
         self.p.par_rows()
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
     #[cfg(feature = "rayon")]
-    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item=&'a mut [u8]> {
+    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item = &'a mut [u8]> {
         self.p.par_rows_mut()
     }
 }
@@ -130,7 +139,11 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     /// Initialize a new pixel buffer.
     ///
     /// Can return `Err` if the platform doesn't support the requested pixel buffer type.
-    pub fn new<H: HasRawWindowHandle>(width: u32, height: u32, window: &H) -> Result<PixelBufferTyped<P>, PixelBufferCreationError> {
+    pub fn new<H: HasRawWindowHandle>(
+        width: u32,
+        height: u32,
+        window: &H,
+    ) -> Result<PixelBufferTyped<P>, PixelBufferCreationError> {
         Ok(PixelBufferTyped {
             p: PixelBuffer::new(width, height, P::FORMAT_TYPE, window)?,
             _format: PhantomData,
@@ -141,8 +154,13 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     ///
     /// This always works, since we've statically checked that the pixel format is supported by
     /// the platform.
-    pub fn new_supported<H: HasRawWindowHandle>(width: u32, height: u32, window: &H) -> PixelBufferTyped<P>
-        where P: PixelBufferFormatSupported
+    pub fn new_supported<H: HasRawWindowHandle>(
+        width: u32,
+        height: u32,
+        window: &H,
+    ) -> PixelBufferTyped<P>
+    where
+        P: PixelBufferFormatSupported,
     {
         Self::new(width, height, window).unwrap()
     }
@@ -161,7 +179,13 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     /// # Panics
     /// The `window` passed to this function must be the same `window` passed to `new`. Failing to
     /// do so will result in a panic.
-    pub fn blit_rect<H: HasRawWindowHandle>(&self, src_pos: (u32, u32), dst_pos: (u32, u32), blit_size: (u32, u32), window: &H) -> io::Result<()> {
+    pub fn blit_rect<H: HasRawWindowHandle>(
+        &self,
+        src_pos: (u32, u32),
+        dst_pos: (u32, u32),
+        blit_size: (u32, u32),
+        window: &H,
+    ) -> io::Result<()> {
         self.p.blit_rect(src_pos, dst_pos, blit_size, window)
     }
 
@@ -203,27 +227,31 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     }
 
     /// Iterate through all rows in the pixel buffer.
-    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a [P]> {
+    pub fn rows<'a>(&'a self) -> impl ExactSizeIterator + DoubleEndedIterator<Item = &'a [P]> {
         self.p.rows().map(P::from_raw_slice)
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
-    pub fn rows_mut<'a>(&'a mut self) -> impl ExactSizeIterator + DoubleEndedIterator<Item=&'a mut [P]> {
+    pub fn rows_mut<'a>(
+        &'a mut self,
+    ) -> impl ExactSizeIterator + DoubleEndedIterator<Item = &'a mut [P]> {
         self.p.rows_mut().map(P::from_raw_slice_mut)
     }
 
     /// Iterate through all rows in the pixel buffer.
     #[cfg(feature = "rayon")]
-    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item=&'a [P]>
-        where P: Send + Sync,
+    pub fn par_rows<'a>(&'a self) -> impl IndexedParallelIterator<Item = &'a [P]>
+    where
+        P: Send + Sync,
     {
         self.p.par_rows().map(P::from_raw_slice)
     }
 
     /// Mutably iterate through all rows in the pixel buffer.
     #[cfg(feature = "rayon")]
-    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item=&'a mut [P]>
-        where P: Send + Sync,
+    pub fn par_rows_mut<'a>(&'a mut self) -> impl IndexedParallelIterator<Item = &'a mut [P]>
+    where
+        P: Send + Sync,
     {
         self.p.par_rows_mut().map(P::from_raw_slice_mut)
     }
@@ -238,7 +266,13 @@ pub enum PixelBufferFormatType {
 }
 
 pub trait PixelBufferFormatSupported: PixelBufferFormat {}
-pub unsafe trait PixelBufferFormat: Sized + Debug + Copy + AsRef<<Self as PixelBufferFormat>::Array> + AsMut<<Self as PixelBufferFormat>::Array> {
+pub unsafe trait PixelBufferFormat:
+    Sized
+    + Debug
+    + Copy
+    + AsRef<<Self as PixelBufferFormat>::Array>
+    + AsMut<<Self as PixelBufferFormat>::Array>
+{
     type Array: Debug + Copy + AsRef<[u8]> + AsMut<[u8]> + AsRef<Self> + AsMut<Self>;
     const DEFAULT: Self;
     const FORMAT_TYPE: PixelBufferFormatType;
