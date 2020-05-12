@@ -248,3 +248,123 @@ impl Drop for PixelBuffer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![cfg_attr(test, allow(dead_code))]
+    use super::*;
+    use winapi::um::{
+        processthreadsapi::{GetCurrentProcess},
+        winnt::{HANDLE},
+        winuser::{GetDesktopWindow, GetDC, ReleaseDC, CreateMenu, DestroyMenu},
+    };
+
+    // TODO: Remove the following once `GetGuiResources` is available from the winapi crate.
+    const GR_GDIOBJECTS: u32 = 0x0;
+    const GR_USEROBJECTS: u32 = 0x1;
+    const GR_GDIOBJECTS_PEAK: u32 = 0x2;
+    const GR_USEROBJECTS_PEAK: u32 = 0x4;
+    extern "system" { fn GetGuiResources( hProcess: HANDLE, uiFlags: u32 ) -> u32; }
+
+    /// Returns the number of GDI objects in use by the calling process.
+    fn gdi_obj_count() -> u32 {
+        unsafe {
+            let proc = GetCurrentProcess();
+            GetGuiResources(proc, GR_GDIOBJECTS)
+        }
+    }
+
+    /// Returns the number of USER objects in use by the calling process.
+    fn user_obj_count() -> u32 {
+        unsafe {
+            let proc = GetCurrentProcess();
+            GetGuiResources(proc, GR_USEROBJECTS)
+        }
+    }
+
+    #[test]
+    /// The purpose of this test is to establish, whether we can rely on the test functions to
+    /// observe no change when there is no change in the monitored state.
+    ///
+    /// This is verifying the test infrastructure only. If this test fails this is no indication
+    /// that the code under test is faulty.
+    fn question_sanity_0() {
+        // Record GDI and USER object count at test start.
+        let user_obj_count_base = user_obj_count();
+        let gdi_obj_count_base = gdi_obj_count();
+
+        // Verify, that no change in GDI and USER object counts are observed.
+        let user_obj_count_current = user_obj_count();
+        assert_eq!(user_obj_count_base, user_obj_count_current,
+            "Expected USER object count: {}; observed USER object count: {}",
+            user_obj_count_base, user_obj_count_current);
+        let gdi_obj_count_current = gdi_obj_count();
+        assert_eq!(gdi_obj_count_base, gdi_obj_count_current,
+            "Expected GDI object count: {}; observed GDI object count: {}",
+            gdi_obj_count_base, gdi_obj_count_current);
+    }
+
+    #[test]
+    /// The purpose of this thest is to verify that GDI and USER object allocations are
+    /// observed.
+    ///
+    /// This is verifying the test infrastructure only. If this test fails this is no indication
+    /// that the code under test is faulty.
+    fn question_sanity_1() {
+        // Record GDI and USER object count at test start.
+        let user_obj_count_base = user_obj_count();
+        let gdi_obj_count_base = gdi_obj_count();
+
+        let hwnd = unsafe { GetDesktopWindow() };
+        // Allocate GDI object.
+        let dc = unsafe { GetDC(hwnd) };
+        // Allocate USER object(s).
+        let menu = unsafe { CreateMenu() };
+        // GDI and USER object count should now be incremented.
+        let user_obj_count_current = user_obj_count();
+        // The precise number of USER objects allocated for an HMENU may vary. We can only assume,
+        // that the resulting USER object allocation count is larger than at test start.
+        assert!(user_obj_count_base < user_obj_count_current);
+        let gdi_obj_count_current = gdi_obj_count();
+        assert_eq!(gdi_obj_count_base + 1, gdi_obj_count_current,
+            "Expected GDI object count: {}; observed GDI object count: {}",
+            gdi_obj_count_base + 1, gdi_obj_count_current);
+
+        // Release allocated GDI and USER objects
+        unsafe { ReleaseDC(hwnd, dc) };
+        unsafe { DestroyMenu(menu) };
+
+        // USER and GDI counts should be back to where we started.
+        assert_eq!(user_obj_count_base, user_obj_count());
+        assert_eq!(gdi_obj_count_base, gdi_obj_count());
+    }
+
+    #[test]
+    /// The purpose of this test is to verify that `PixelBuffer::new` doesn't leak any resources.
+    ///
+    /// The test creates a new `PixelBuffer` and immediately drops it again. It is expected that the
+    /// GDI and USER object count stays the same across this test.
+    fn test_pixelbuffer_new_resource_leaks() {
+        // Record GDI and USER object count at test start.
+        let user_obj_count_base = user_obj_count();
+        let gdi_obj_count_base = gdi_obj_count();
+
+        // Perform test(s).
+        {
+            let hwnd = unsafe { GetDesktopWindow() };
+            let handle = WindowsHandle{ hwnd: hwnd as _, hinstance: ptr::null_mut(), ..WindowsHandle::empty() };
+            let handle = RawWindowHandle::Windows(handle);
+            let _pb = unsafe { PixelBuffer::new(256, 256, PixelBufferFormatType::BGRA, handle) };
+        } // <- drop PixelBuffer and release resources
+
+        // Compare GDI and USER object count at test end.
+        let user_obj_count_current = user_obj_count();
+        assert_eq!(user_obj_count_base, user_obj_count_current,
+            "Expected USER object count: {}; observed USER object count: {}",
+            user_obj_count_base, user_obj_count_current);
+        let gdi_obj_count_current = gdi_obj_count();
+        assert_eq!(gdi_obj_count_base, gdi_obj_count_current,
+            "Expected GDI object count: {}; observed GDI object count: {}",
+            gdi_obj_count_base, gdi_obj_count_current);
+    }
+}
