@@ -57,14 +57,17 @@ impl PixelBuffer {
                     biClrUsed: 0,
                     biClrImportant: 0,
                 };
-                wingdi::CreateDIBSection(
-                    winuser::GetDC(ptr::null_mut()),
+                let dc = winuser::GetDC(ptr::null_mut());
+                let dib_section = wingdi::CreateDIBSection(
+                    dc,
                     &info as *const BITMAPINFOHEADER as _,
                     wingdi::DIB_RGB_COLORS,
                     &mut ptr::null_mut(),
                     ptr::null_mut(),
                     0,
-                )
+                );
+                winuser::ReleaseDC(ptr::null_mut(), dc);
+                dib_section
             };
 
             assert_ne!(std::ptr::null_mut(), handle);
