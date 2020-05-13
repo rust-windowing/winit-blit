@@ -258,6 +258,10 @@ mod tests {
         winnt::{HANDLE},
         winuser::{GetDesktopWindow, GetDC, ReleaseDC, CreateMenu, DestroyMenu},
     };
+    // Resource consumption tests observe per-process state. To ensure that tests do not interfere
+    // with each other, they must not execute concurrently. The `#[serial]` attribute macro ensures
+    // that tests are run in serial.
+    use serial_test::serial;
 
     // TODO: Remove the following once `GetGuiResources` is available from the winapi crate.
     const GR_GDIOBJECTS: u32 = 0x0;
@@ -283,12 +287,13 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     /// The purpose of this test is to establish, whether we can rely on the test functions to
     /// observe no change when there is no change in the monitored state.
     ///
     /// This is verifying the test infrastructure only. If this test fails this is no indication
     /// that the code under test is faulty.
-    fn question_sanity_0() {
+    fn test_resource_count_unchanged() {
         // Record GDI and USER object count at test start.
         let user_obj_count_base = user_obj_count();
         let gdi_obj_count_base = gdi_obj_count();
@@ -305,12 +310,13 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     /// The purpose of this thest is to verify that GDI and USER object allocations are
     /// observed.
     ///
     /// This is verifying the test infrastructure only. If this test fails this is no indication
     /// that the code under test is faulty.
-    fn question_sanity_1() {
+    fn test_resource_count_with_change() {
         // Record GDI and USER object count at test start.
         let user_obj_count_base = user_obj_count();
         let gdi_obj_count_base = gdi_obj_count();
@@ -335,16 +341,21 @@ mod tests {
         unsafe { DestroyMenu(menu) };
 
         // USER and GDI counts should be back to where we started.
-        assert_eq!(user_obj_count_base, user_obj_count());
-        assert_eq!(gdi_obj_count_base, gdi_obj_count());
+        assert_eq!(user_obj_count_base, user_obj_count(),
+            "Expected USER object count: {}; observed USER object count: {}",
+            user_obj_count_base, user_obj_count());
+        assert_eq!(gdi_obj_count_base, gdi_obj_count(),
+            "Expected GDI object count: {}; observed GDI object count: {}",
+            gdi_obj_count_base, gdi_obj_count());
     }
 
     #[test]
+    #[serial]
     /// The purpose of this test is to verify that `PixelBuffer::new` doesn't leak any resources.
     ///
     /// The test creates a new `PixelBuffer` and immediately drops it again. It is expected that the
     /// GDI and USER object count stays the same across this test.
-    fn test_pixelbuffer_new_resource_leaks() {
+    fn test_pixelbuffer_new_for_resource_leaks() {
         // Record GDI and USER object count at test start.
         let user_obj_count_base = user_obj_count();
         let gdi_obj_count_base = gdi_obj_count();
