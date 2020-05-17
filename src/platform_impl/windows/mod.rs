@@ -113,7 +113,7 @@ impl PixelBuffer {
         let hdc = winuser::GetDC(hwnd as _);
 
         let src_dc = wingdi::CreateCompatibleDC(hdc);
-        wingdi::SelectObject(src_dc, self.handle as _);
+        let prev_bmp = wingdi::SelectObject(src_dc, self.handle as _);
         let result = wingdi::BitBlt(
             hdc,
             px_cast(src_pos.0), px_cast(src_pos.1),
@@ -124,7 +124,9 @@ impl PixelBuffer {
         );
         let error = io::Error::last_os_error();
 
+        wingdi::SelectObject(src_dc, prev_bmp);
         wingdi::DeleteDC(src_dc);
+        winuser::ReleaseDC(hwnd, hdc);
 
         if result != 0 {
             Ok(())
