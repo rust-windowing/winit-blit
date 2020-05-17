@@ -261,6 +261,7 @@ mod tests {
         winnt::HANDLE,
         winuser::{GetDesktopWindow, GetDC, ReleaseDC, CreateMenu, DestroyMenu},
     };
+    use winapi::shared::windef::HWND;
     // Resource consumption tests observe per-process state. To ensure that tests do not interfere
     // with each other, they must not execute concurrently. The `#[serial]` attribute macro ensures
     // that tests are run in serial.
@@ -289,6 +290,12 @@ mod tests {
         }
     }
 
+    /// Constructs a `RawWindowHandle` from an `HWND`.
+    fn from_hwnd(hwnd: HWND) -> RawWindowHandle {
+        let handle = WindowsHandle{ hwnd: hwnd as _, ..WindowsHandle::empty() };
+        RawWindowHandle::Windows(handle)
+    }
+
     #[test]
     #[serial]
     /// The purpose of this test is to establish, whether we can rely on the test functions to
@@ -296,7 +303,7 @@ mod tests {
     ///
     /// This is verifying the test infrastructure only. If this test fails this is no indication
     /// that the code under test is faulty.
-    fn test_resource_count_unchanged() {
+    fn resource_count_unchanged() {
         // Record GDI and USER object count at test start.
         let obj_count_base = obj_count();
 
@@ -317,7 +324,7 @@ mod tests {
     ///
     /// This is verifying the test infrastructure only. If this test fails this is no indication
     /// that the code under test is faulty.
-    fn test_resource_count_with_change() {
+    fn resource_count_with_change() {
         // Record GDI and USER object count at test start.
         let obj_count_base = obj_count();
 
@@ -355,16 +362,14 @@ mod tests {
     ///
     /// The test creates a new `PixelBuffer` and immediately drops it again. It is expected that the
     /// GDI and USER object count stays the same across this test.
-    fn test_pixelbuffer_new_for_resource_leaks() {
+    fn pixelbuffer_new_resource_leaks() {
         // Record GDI and USER object count at test start.
         let obj_count_base = obj_count();
 
         // Perform test(s).
-        {
-            let hwnd = unsafe { GetDesktopWindow() };
-            let handle = WindowsHandle{ hwnd: hwnd as _, hinstance: ptr::null_mut(), ..WindowsHandle::empty() };
-            let handle = RawWindowHandle::Windows(handle);
-            let _pb = unsafe { PixelBuffer::new(256, 256, PixelBufferFormatType::BGRA, handle) };
+        unsafe {
+            let raw_handle = from_hwnd(GetDesktopWindow());
+            let _pb = PixelBuffer::new(256, 256, PixelBufferFormatType::BGRA, raw_handle).unwrap();
         } // <- drop PixelBuffer and release resources
 
         // Compare GDI and USER object count at test end.
@@ -374,6 +379,30 @@ mod tests {
             obj_count_base.user, obj_count_current.user);
         assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
             "Expected GDI object count: {}; observed GDI object count: {}",
+            obj_count_base.gdi, obj_count_current.gdi);
+    }
+
+    #[test]
+    #[serial]
+    /// The purpose of this test is to verify that `PixelBuffer::blit` doesn't leak resources.
+    fn pixelbuffer_blit_resource_leaks() {
+        // Record process-global GDI and USER resource state at test start.
+        let obj_count_base = obj_count();
+
+        // Perform test
+        unsafe {
+            let desktop_wnd = from_hwnd(GetDesktopWindow());
+            let pb = PixelBuffer::new(31, 31, PixelBufferFormatType::BGR, desktop_wnd).unwrap();
+            let _res = pb.blit(desktop_wnd);
+        }
+
+        // It is expected that all resources have been released at this point.
+        let obj_count_current = obj_count();
+        assert_eq!(obj_count_base.user, obj_count_current.user,
+            "Expected USER object count: {}; observed USER object count: {}",
+            obj_count_base.user, obj_count_current.user);
+        assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
+            "Expedted GDI object count: {}; observed GDI object count: {}",
             obj_count_base.gdi, obj_count_current.gdi);
     }
 }
