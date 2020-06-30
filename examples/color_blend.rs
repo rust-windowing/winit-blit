@@ -1,5 +1,5 @@
 use winit::{
-    event::{Event, WindowEvent, KeyboardInput, ElementState},
+    event::{ElementState, Event, KeyboardInput, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -40,28 +40,29 @@ fn main() {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => *control_flow = ControlFlow::Exit,
-            Event::WindowEvent {
-                event: WindowEvent::RedrawRequested,
-                ..
-            } => {
-                let (width, height): (u32, u32) = window.inner_size().to_physical(window.hidpi_factor()).into();
-                let mut buffer = PixelBufferTyped::<BGRA>::new_supported(width, height, &window);
-                let start = std::time::Instant::now();
-                for (i, row) in buffer.rows_mut().enumerate() {
-                    let y = ((i as f32 / height as f32) * 255.0).round() as u8;
-                    let t_blend = blend_approx(y, red, green);
-                    let b_blend = blend_approx(y, alpha, blue);
-                    for (j, pixel) in row.into_iter().enumerate() {
-                        // *pixel = x_blend;
-                        let x = ((j as f32 / width as f32) * 255.0).round() as u8;
-                        *pixel = blend_approx(x, t_blend, b_blend);
-                    }
-                }
-                let end = std::time::Instant::now();
-                println!("{:?}", end - start);
+            Event::RedrawRequested(window_id) => {
+                if window_id == window.id() {
+                    let (width, height): (u32, u32) = window.inner_size().into();
+                    let mut buffer =
+                        PixelBufferTyped::<BGRA>::new_supported(width, height, &window);
+                    let start = std::time::Instant::now();
 
-                buffer.blit(&window).unwrap();
-            },
+                    for (i, row) in buffer.rows_mut().enumerate() {
+                        let y = ((i as f32 / height as f32) * 255.0).round() as u8;
+                        let t_blend = blend_approx(y, red, green);
+                        let b_blend = blend_approx(y, alpha, blue);
+                        for (j, pixel) in row.into_iter().enumerate() {
+                            // *pixel = x_blend;
+                            let x = ((j as f32 / width as f32) * 255.0).round() as u8;
+                            *pixel = blend_approx(x, t_blend, b_blend);
+                        }
+                    }
+                    let end = std::time::Instant::now();
+                    println!("{:?}", end - start);
+
+                    buffer.blit(&window).unwrap();
+                }
+            }
             _ => *control_flow = ControlFlow::Wait,
         }
     });

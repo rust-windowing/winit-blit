@@ -13,4 +13,4 @@ raw-window-handle = "0.3"
 winapi = {version = "0.3", features = ["windef", "winuser", "wingdi"]}
 
 [dev-dependencies]
-winit = "0.20.0-alpha4"
+winit = "0.22.0"
