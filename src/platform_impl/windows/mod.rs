@@ -57,14 +57,17 @@ impl PixelBuffer {
                     biClrUsed: 0,
                     biClrImportant: 0,
                 };
-                wingdi::CreateDIBSection(
-                    winuser::GetDC(ptr::null_mut()),
+                let dc = winuser::GetDC(ptr::null_mut());
+                let dib_section = wingdi::CreateDIBSection(
+                    dc,
                     &info as *const BITMAPINFOHEADER as _,
                     wingdi::DIB_RGB_COLORS,
                     &mut ptr::null_mut(),
                     ptr::null_mut(),
                     0,
-                )
+                );
+                winuser::ReleaseDC(ptr::null_mut(), dc);
+                dib_section
             };
 
             assert_ne!(std::ptr::null_mut(), handle);
@@ -110,7 +113,7 @@ impl PixelBuffer {
         let hdc = winuser::GetDC(hwnd as _);
 
         let src_dc = wingdi::CreateCompatibleDC(hdc);
-        wingdi::SelectObject(src_dc, self.handle as _);
+        let prev_bmp = wingdi::SelectObject(src_dc, self.handle as _);
         let result = wingdi::BitBlt(
             hdc,
             px_cast(src_pos.0), px_cast(src_pos.1),
@@ -121,7 +124,9 @@ impl PixelBuffer {
         );
         let error = io::Error::last_os_error();
 
+        wingdi::SelectObject(src_dc, prev_bmp);
         wingdi::DeleteDC(src_dc);
+        winuser::ReleaseDC(hwnd, hdc);
 
         if result != 0 {
             Ok(())
@@ -246,5 +251,92 @@ impl Drop for PixelBuffer {
         unsafe {
             wingdi::DeleteObject(self.handle as _);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use winapi::shared::windef::HWND;
+    use winapi::um::{
+        processthreadsapi::GetCurrentProcess, winnt::HANDLE, winuser::GetDesktopWindow,
+    };
+    // Resource consumption tests observe per-process state. To ensure that tests do not interfere
+    // with each other, they must not execute concurrently. The `#[serial]` attribute macro ensures
+    // that tests are run in serial.
+    use serial_test::serial;
+
+    // TODO: Remove the following once `GetGuiResources` is available from the winapi crate.
+    // See [this issue](https://github.com/retep998/winapi-rs/issues/888) for reference.
+    const GR_GDIOBJECTS: u32 = 0x0;
+    // const GR_USEROBJECTS: u32 = 0x1;
+    // const GR_GDIOBJECTS_PEAK: u32 = 0x2;
+    // const GR_USEROBJECTS_PEAK: u32 = 0x4;
+    extern "system" {
+        fn GetGuiResources(hProcess: HANDLE, uiFlags: u32) -> u32;
+    }
+
+    /// Returns the number of GDI objects currently in use by the calling process.
+    fn gdi_obj_count() -> u32 {
+        unsafe {
+            let proc = GetCurrentProcess();
+            GetGuiResources(proc, GR_GDIOBJECTS)
+        }
+    }
+
+    /// Constructs a `RawWindowHandle` from an `HWND`.
+    fn from_hwnd(hwnd: HWND) -> RawWindowHandle {
+        let handle = WindowsHandle {
+            hwnd: hwnd as _,
+            ..WindowsHandle::empty()
+        };
+        RawWindowHandle::Windows(handle)
+    }
+
+    #[test]
+    #[serial]
+    /// The purpose of this test is to verify that `PixelBuffer::new` doesn't leak any resources.
+    ///
+    /// The test creates a new `PixelBuffer` and immediately drops it again. It is expected that the
+    /// GDI object count stays the same across this test.
+    fn pixelbuffer_new_resource_leaks() {
+        let obj_count_base = gdi_obj_count();
+
+        // Perform test(s).
+        unsafe {
+            let raw_handle = from_hwnd(GetDesktopWindow());
+            let _pb = PixelBuffer::new(256, 256, PixelBufferFormatType::BGRA, raw_handle).unwrap();
+        } // <- drop PixelBuffer and release resources
+
+        // Compare GDI object count at test end.
+        let obj_count_current = gdi_obj_count();
+        assert_eq!(
+            obj_count_base, obj_count_current,
+            "Expected GDI object count: {}; observed GDI object count: {}",
+            obj_count_base, obj_count_current
+        );
+    }
+
+    #[test]
+    #[serial]
+    /// The purpose of this test is to verify that `PixelBuffer::blit` doesn't leak resources.
+    fn pixelbuffer_blit_resource_leaks() {
+        let obj_count_base = gdi_obj_count();
+
+        // Perform test
+        unsafe {
+            let desktop_wnd = from_hwnd(GetDesktopWindow());
+            let pb = PixelBuffer::new(31, 31, PixelBufferFormatType::BGR, desktop_wnd).unwrap();
+            let _res = pb.blit(desktop_wnd);
+        }
+
+        // It is expected that all resources have been released at this point.
+        let obj_count_current = gdi_obj_count();
+        assert_eq!(
+            obj_count_base, obj_count_current,
+            "Expedted GDI object count: {}; observed GDI object count: {}",
+            obj_count_base, obj_count_current
+        );
     }
 }
