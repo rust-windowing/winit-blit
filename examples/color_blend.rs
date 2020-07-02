@@ -26,7 +26,15 @@ fn main() {
 
         match event {
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput{input: KeyboardInput{state: ElementState::Pressed, ..}, ..},
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    },
                 window_id,
             } if window_id == window.id() => {
                 blend_mode = match blend_mode {
@@ -79,7 +87,10 @@ fn blend(i: u8, a: BGRA, b: BGRA) -> BGRA {
     let i = i as f32 / 255.0;
     let a_f = 1.0 - i;
     let b_f = i;
-    let bl = |a: u8, b: u8| ((a_f * (a as f32 / 255.0).powf(2.2) + b_f * (b as f32 / 255.0).powf(2.2)).powf(1.0/2.2) * 255.0) as u8;
+    let bl = |a: u8, b: u8| {
+        ((a_f * (a as f32 / 255.0).powf(2.2) + b_f * (b as f32 / 255.0).powf(2.2)).powf(1.0 / 2.2)
+            * 255.0) as u8
+    };
 
     BGRA {
         r: bl(a.r, b.r),
@@ -90,17 +101,12 @@ fn blend(i: u8, a: BGRA, b: BGRA) -> BGRA {
 }
 
 fn bl(f: u8, a: u8, b: u8) -> u8 {
-    let a_linear = POWER_TABLE[a as usize] as u32;//a.pow(3) + 765 * a.pow(2);
-    let b_linear = POWER_TABLE[b as usize] as u32;//b.pow(3) + 765 * b.pow(2);
+    let a_linear = POWER_TABLE[a as usize] as u32; //a.pow(3) + 765 * a.pow(2);
+    let b_linear = POWER_TABLE[b as usize] as u32; //b.pow(3) + 765 * b.pow(2);
     let f = f as u32;
     let a_f = 255 - f;
     let b_f = f;
-    let val = (
-        (
-            a_f * a_linear +
-            b_f * b_linear
-        ) / 255
-    ) as u16;
+    let val = ((a_f * a_linear + b_f * b_linear) / 255) as u16;
     // CORRECTION_TABLE[val as usize]
     interp_correction_table((val >> 8) as u8, val as u8)
 }
@@ -170,7 +176,6 @@ fn bl_naive(f: u8, a: u8, b: u8) -> u8 {
     let b_f = f;
     ((a_f * a + b_f * b) / 255) as u8
 }
-
 
 fn blend_naive(f: u8, a: BGRA, b: BGRA) -> BGRA {
     BGRA {
