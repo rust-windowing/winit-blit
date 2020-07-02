@@ -256,106 +256,42 @@ impl Drop for PixelBuffer {
 
 #[cfg(test)]
 mod tests {
-    #![cfg_attr(test, allow(dead_code))]
     use super::*;
-    use winapi::um::{
-        processthreadsapi::GetCurrentProcess,
-        winnt::HANDLE,
-        winuser::{GetDesktopWindow, GetDC, ReleaseDC, CreateMenu, DestroyMenu},
-    };
+
     use winapi::shared::windef::HWND;
+    use winapi::um::{
+        processthreadsapi::GetCurrentProcess, winnt::HANDLE, winuser::GetDesktopWindow,
+    };
     // Resource consumption tests observe per-process state. To ensure that tests do not interfere
     // with each other, they must not execute concurrently. The `#[serial]` attribute macro ensures
     // that tests are run in serial.
     use serial_test::serial;
 
     // TODO: Remove the following once `GetGuiResources` is available from the winapi crate.
+    // See [this issue](https://github.com/retep998/winapi-rs/issues/888) for reference.
     const GR_GDIOBJECTS: u32 = 0x0;
-    const GR_USEROBJECTS: u32 = 0x1;
-    const GR_GDIOBJECTS_PEAK: u32 = 0x2;
-    const GR_USEROBJECTS_PEAK: u32 = 0x4;
-    extern "system" { fn GetGuiResources( hProcess: HANDLE, uiFlags: u32 ) -> u32; }
-
-    struct ObjCount {
-        gdi: u32,
-        user: u32,
+    // const GR_USEROBJECTS: u32 = 0x1;
+    // const GR_GDIOBJECTS_PEAK: u32 = 0x2;
+    // const GR_USEROBJECTS_PEAK: u32 = 0x4;
+    extern "system" {
+        fn GetGuiResources(hProcess: HANDLE, uiFlags: u32) -> u32;
     }
 
-    /// Returns the number of GDI and USER objects currently in use by the calling process.
-    fn obj_count() -> ObjCount {
+    /// Returns the number of GDI objects currently in use by the calling process.
+    fn gdi_obj_count() -> u32 {
         unsafe {
             let proc = GetCurrentProcess();
-            ObjCount {
-                gdi: GetGuiResources(proc, GR_GDIOBJECTS),
-                user: GetGuiResources(proc, GR_USEROBJECTS),
-            }
+            GetGuiResources(proc, GR_GDIOBJECTS)
         }
     }
 
     /// Constructs a `RawWindowHandle` from an `HWND`.
     fn from_hwnd(hwnd: HWND) -> RawWindowHandle {
-        let handle = WindowsHandle{ hwnd: hwnd as _, ..WindowsHandle::empty() };
+        let handle = WindowsHandle {
+            hwnd: hwnd as _,
+            ..WindowsHandle::empty()
+        };
         RawWindowHandle::Windows(handle)
-    }
-
-    #[test]
-    #[serial]
-    /// The purpose of this test is to establish, whether we can rely on the test functions to
-    /// observe no change when there is no change in the monitored state.
-    ///
-    /// This is verifying the test infrastructure only. If this test fails this is no indication
-    /// that the code under test is faulty.
-    fn resource_count_unchanged() {
-        // Record GDI and USER object count at test start.
-        let obj_count_base = obj_count();
-
-        // Verify, that no change in GDI and USER object counts are observed.
-        let obj_count_current = obj_count();
-        assert_eq!(obj_count_base.user, obj_count_current.user,
-            "Expected USER object count: {}; observed USER object count: {}",
-            obj_count_base.user, obj_count_current.user);
-        assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
-            "Expected GDI object count: {}; observed GDI object count: {}",
-            obj_count_base.gdi, obj_count_current.gdi);
-    }
-
-    #[test]
-    #[serial]
-    /// The purpose of this thest is to verify that GDI and USER object allocations are
-    /// observed.
-    ///
-    /// This is verifying the test infrastructure only. If this test fails this is no indication
-    /// that the code under test is faulty.
-    fn resource_count_with_change() {
-        // Record GDI and USER object count at test start.
-        let obj_count_base = obj_count();
-
-        let hwnd = unsafe { GetDesktopWindow() };
-        // Allocate GDI object.
-        let dc = unsafe { GetDC(hwnd) };
-        // Allocate USER object(s).
-        let menu = unsafe { CreateMenu() };
-        // GDI and USER object count should now be incremented.
-        let obj_count_current = obj_count();
-        // The precise number of USER objects allocated for an HMENU may vary. We can only assume,
-        // that the resulting USER object allocation count is larger than at test start.
-        assert!(obj_count_base.user < obj_count_current.user);
-        assert_eq!(obj_count_base.gdi + 1, obj_count_current.gdi,
-            "Expected GDI object count: {}; observed GDI object count: {}",
-            obj_count_base.gdi + 1, obj_count_current.gdi);
-
-        // Release allocated GDI and USER objects
-        unsafe { ReleaseDC(hwnd, dc) };
-        unsafe { DestroyMenu(menu) };
-
-        // USER and GDI counts should be back to where we started.
-        let obj_count_current = obj_count();
-        assert_eq!(obj_count_base.user, obj_count_current.user,
-            "Expected USER object count: {}; observed USER object count: {}",
-            obj_count_base.user, obj_count_current.user);
-        assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
-            "Expected GDI object count: {}; observed GDI object count: {}",
-            obj_count_base.gdi, obj_count_current.gdi);
     }
 
     #[test]
@@ -363,10 +299,9 @@ mod tests {
     /// The purpose of this test is to verify that `PixelBuffer::new` doesn't leak any resources.
     ///
     /// The test creates a new `PixelBuffer` and immediately drops it again. It is expected that the
-    /// GDI and USER object count stays the same across this test.
+    /// GDI object count stays the same across this test.
     fn pixelbuffer_new_resource_leaks() {
-        // Record GDI and USER object count at test start.
-        let obj_count_base = obj_count();
+        let obj_count_base = gdi_obj_count();
 
         // Perform test(s).
         unsafe {
@@ -374,22 +309,20 @@ mod tests {
             let _pb = PixelBuffer::new(256, 256, PixelBufferFormatType::BGRA, raw_handle).unwrap();
         } // <- drop PixelBuffer and release resources
 
-        // Compare GDI and USER object count at test end.
-        let obj_count_current = obj_count();
-        assert_eq!(obj_count_base.user, obj_count_current.user,
-            "Expected USER object count: {}; observed USER object count: {}",
-            obj_count_base.user, obj_count_current.user);
-        assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
+        // Compare GDI object count at test end.
+        let obj_count_current = gdi_obj_count();
+        assert_eq!(
+            obj_count_base, obj_count_current,
             "Expected GDI object count: {}; observed GDI object count: {}",
-            obj_count_base.gdi, obj_count_current.gdi);
+            obj_count_base, obj_count_current
+        );
     }
 
     #[test]
     #[serial]
     /// The purpose of this test is to verify that `PixelBuffer::blit` doesn't leak resources.
     fn pixelbuffer_blit_resource_leaks() {
-        // Record process-global GDI and USER resource state at test start.
-        let obj_count_base = obj_count();
+        let obj_count_base = gdi_obj_count();
 
         // Perform test
         unsafe {
@@ -399,12 +332,11 @@ mod tests {
         }
 
         // It is expected that all resources have been released at this point.
-        let obj_count_current = obj_count();
-        assert_eq!(obj_count_base.user, obj_count_current.user,
-            "Expected USER object count: {}; observed USER object count: {}",
-            obj_count_base.user, obj_count_current.user);
-        assert_eq!(obj_count_base.gdi, obj_count_current.gdi,
+        let obj_count_current = gdi_obj_count();
+        assert_eq!(
+            obj_count_base, obj_count_current,
             "Expedted GDI object count: {}; observed GDI object count: {}",
-            obj_count_base.gdi, obj_count_current.gdi);
+            obj_count_base, obj_count_current
+        );
     }
 }
