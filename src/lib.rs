@@ -1,6 +1,11 @@
 mod platform_impl;
 use raw_window_handle::HasRawWindowHandle;
-use std::{fmt::Debug, io, marker::PhantomData};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    fmt::Debug,
+    io,
+    marker::PhantomData,
+};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -257,23 +262,50 @@ impl<P: PixelBufferFormat> PixelBufferTyped<P> {
     }
 }
 
+/// The pixel buffer's format. Each variant corresponds to one of the pixel format types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PixelBufferFormatType {
+    /// Buffer is blue-green-red formatted. Corresponds to the [`BGR`](crate::BGR) type.
     BGR,
+    /// Buffer is blue-green-red-alpha formatted. Corresponds to the [`BGRA`](crate::BGRA) type.
     BGRA,
+    /// Buffer is red-green-blue formatted. Corresponds to the [`RGB`](crate::RGBA) type.
     RGB,
+    /// Buffer is red-green-blue-alpha formatted. Corresponds to the [`RGBA`](crate::RGBA) type.
     RGBA,
 }
 
+/// A pixel buffer format that's supported on the current platform.
+///
+/// ## Supported formats by platform
+///
+/// |         | [`BGR`] | [`BGRA`] | [`RGB`] | [`RGBA`] |
+/// | ------- | ------- | -------- | ------- | -------- |
+/// | Windows | ✔      | ✔      | ❌      | ❌      |
 pub trait PixelBufferFormatSupported: PixelBufferFormat {}
+/// The format of each individual pixel in the pixel buffer.
+///
+/// # Safety
+///
+/// Pixel type must be aligned on a `u8` boundary, and the slice conversion functions must be
+/// infallible and implemented soundly.
 pub unsafe trait PixelBufferFormat:
     Sized
     + Debug
     + Copy
     + AsRef<<Self as PixelBufferFormat>::Array>
     + AsMut<<Self as PixelBufferFormat>::Array>
+    + Borrow<<Self as PixelBufferFormat>::Array>
+    + BorrowMut<<Self as PixelBufferFormat>::Array>
 {
-    type Array: Debug + Copy + AsRef<[u8]> + AsMut<[u8]> + AsRef<Self> + AsMut<Self>;
+    type Array: Debug
+        + Copy
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + AsRef<Self>
+        + AsMut<Self>
+        + Borrow<Self>
+        + BorrowMut<Self>;
     const DEFAULT: Self;
     const FORMAT_TYPE: PixelBufferFormatType;
 
@@ -285,7 +317,8 @@ pub unsafe trait PixelBufferFormat:
 }
 
 macro_rules! pixel_buffer_format {
-    ($pixel:ident($($c:ident),+): $array:ty = $default:expr) => {
+    ($(#[$attr:meta])* pub struct $pixel:ident($($c:ident),+): $array:ty = $default:expr;) => {
+        $(#[$attr])*
         #[repr(C)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub struct $pixel {
@@ -404,6 +437,26 @@ macro_rules! pixel_buffer_format {
                 unsafe{ &mut *(self as *mut Self as *mut $pixel) }
             }
         }
+        impl Borrow<$array> for $pixel {
+            fn borrow(&self) -> &$array {
+                unsafe{ &*(self as *const Self as *const $array) }
+            }
+        }
+        impl BorrowMut<$array> for $pixel {
+            fn borrow_mut(&mut self) -> &mut $array {
+                unsafe{ &mut *(self as *mut Self as *mut $array) }
+            }
+        }
+        impl Borrow<$pixel> for $array {
+            fn borrow(&self) -> &$pixel {
+                unsafe{ &*(self as *const Self as *const $pixel) }
+            }
+        }
+        impl BorrowMut<$pixel> for $array {
+            fn borrow_mut(&mut self) -> &mut $pixel {
+                unsafe{ &mut *(self as *mut Self as *mut $pixel) }
+            }
+        }
         impl From<$array> for $pixel {
             fn from(array: $array) -> $pixel {
                 unsafe{ std::mem::transmute(array) }
@@ -422,8 +475,27 @@ macro_rules! pixel_buffer_format {
     };
 }
 
+/// The native pixel format for the current platform.
+///
+/// This is always the fastest format to use for a given platform, and always implements
+/// [`PixelBufferFormatSupported`](crate::PixelBufferFormatSupported).
+///
+/// Using this type alongside the [`PixelBufferFormat`](crate::PixelBufferFormat) methods will
+/// result in code that is guaranteed to work on all platforms.
 pub type NativeFormat = platform_impl::NativeFormat;
-pixel_buffer_format!(BGR(b, g, r): [u8; 3] = Self::new(0, 0, 0));
-pixel_buffer_format!(BGRA(b, g, r, a): [u8; 4] = Self::new(0, 0, 0, 255));
-pixel_buffer_format!(RGB(r, g, b): [u8; 3] = Self::new(0, 0, 0));
-pixel_buffer_format!(RGBA(r, g, b, a): [u8; 4] = Self::new(0, 0, 0, 255));
+pixel_buffer_format! {
+    /// A blue-green-red formatted pixel type.
+    pub struct BGR(b, g, r): [u8; 3] = Self::new(0, 0, 0);
+}
+pixel_buffer_format! {
+    /// A blue-green-red-alpha formatted pixel type.
+    pub struct BGRA(b, g, r, a): [u8; 4] = Self::new(0, 0, 0, 255);
+}
+pixel_buffer_format! {
+    /// A red-green-blue formatted pixel type.
+    pub struct RGB(r, g, b): [u8; 3] = Self::new(0, 0, 0);
+}
+pixel_buffer_format! {
+    /// A red-green-blue-alpha formatted pixel type.
+    pub struct RGBA(r, g, b, a): [u8; 4] = Self::new(0, 0, 0, 255);
+}
