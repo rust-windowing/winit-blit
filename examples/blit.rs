@@ -13,6 +13,22 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::platform::web::WindowExtWebSys;
+
+        console_error_panic_hook::set_once();
+
+        web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .body()
+            .unwrap()
+            .append_child(&window.canvas())
+            .unwrap();
+    }
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
