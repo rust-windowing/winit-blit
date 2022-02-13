@@ -282,6 +282,7 @@ pub enum PixelBufferFormatType {
 /// |         | [`BGR`] | [`BGRA`] | [`RGB`] | [`RGBA`] |
 /// | ------- | ------- | -------- | ------- | -------- |
 /// | Windows | ✔      | ✔      | ❌      | ❌      |
+/// | Web     | ❌      | ❌      | ❌      | ✔      |
 pub trait PixelBufferFormatSupported: PixelBufferFormat {}
 /// The format of each individual pixel in the pixel buffer.
 ///
